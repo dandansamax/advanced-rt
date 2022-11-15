@@ -7,7 +7,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 mod texture;
@@ -43,28 +43,24 @@ impl Vertex {
 
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-0.0868241, 0.49240386, 0.0],
+        position: [-1.0, 1.0, 0.0],
         tex_coords: [0.4131759, 0.00759614],
     }, // A
     Vertex {
-        position: [-0.49513406, 0.06958647, 0.0],
+        position: [-1.0, -1.0, 0.0],
         tex_coords: [0.0048659444, 0.43041354],
     }, // B
     Vertex {
-        position: [-0.21918549, -0.44939706, 0.0],
-        tex_coords: [0.28081453, 0.949397],
-    }, // C
+        position: [1.0, -1.0, 0.0],
+        tex_coords: [0.0048659444, 0.43041354],
+    }, // B
     Vertex {
-        position: [0.35966998, -0.3473291, 0.0],
-        tex_coords: [0.85967, 0.84732914],
-    }, // D
-    Vertex {
-        position: [0.44147372, 0.2347359, 0.0],
-        tex_coords: [0.9414737, 0.2652641],
-    }, // E
+        position: [1.0, 1.0, 0.0],
+        tex_coords: [0.0048659444, 0.43041354],
+    }, // B
 ];
 
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, /* padding */ 0];
+const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3, /* padding */ 0];
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -96,6 +92,23 @@ impl Camera {
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct CameraUniform {
     view_proj: [[f32; 4]; 4],
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct MetaInfo {
+    resolution: [u32; 2],
+}
+
+impl MetaInfo {
+    fn new() -> Self {
+        Self {
+            resolution: [800, 600],
+        }
+    }
+    fn update_resolution(&mut self, size: &winit::dpi::PhysicalSize<u32>) {
+        self.resolution = [size.width, size.height]
+    }
 }
 
 impl CameraUniform {
@@ -230,6 +243,9 @@ struct State {
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    meta_info: MetaInfo,
+    meta_buffer: wgpu::Buffer,
+    meta_bind_group: wgpu::BindGroup,
 }
 
 impl State {
@@ -332,6 +348,15 @@ impl State {
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera);
 
+        let mut meta_info = MetaInfo::new();
+        meta_info.update_resolution(&size);
+
+        let meta_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Meta Buffer"),
+            contents: bytemuck::cast_slice(&[meta_info]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
             contents: bytemuck::cast_slice(&[camera_uniform]),
@@ -353,6 +378,30 @@ impl State {
                 label: Some("camera_bind_group_layout"),
             });
 
+        let meta_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("meta_bind_group_layout"),
+            });
+
+        let meta_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &meta_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: meta_buffer.as_entire_binding(),
+            }],
+            label: Some("meta_bind_group"),
+        });
+
         let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &camera_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
@@ -370,7 +419,11 @@ impl State {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&texture_bind_group_layout, &camera_bind_group_layout],
+                bind_group_layouts: &[
+                    &texture_bind_group_layout,
+                    &camera_bind_group_layout,
+                    &meta_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
 
@@ -444,9 +497,12 @@ impl State {
             diffuse_bind_group,
             camera,
             camera_controller,
+            camera_uniform,
             camera_buffer,
             camera_bind_group,
-            camera_uniform,
+            meta_info,
+            meta_buffer,
+            meta_bind_group,
         }
     }
 
@@ -473,6 +529,12 @@ impl State {
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
+        self.meta_info.update_resolution(&self.size);
+        self.queue.write_buffer(
+            &self.meta_buffer,
+            0,
+            bytemuck::cast_slice(&[self.meta_info]),
+        )
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -509,6 +571,7 @@ impl State {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.meta_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
@@ -521,7 +584,7 @@ impl State {
     }
 }
 
-#[cfg_attr(target_arch="wasm32", wasm_bindgen(start))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
     cfg_if::cfg_if! {
         if #[cfg(target_arch = "wasm32")] {
@@ -541,7 +604,7 @@ pub async fn run() {
         // the size manually when on web.
         use winit::dpi::PhysicalSize;
         window.set_inner_size(PhysicalSize::new(450, 400));
-        
+
         use winit::platform::web::WindowExtWebSys;
         web_sys::window()
             .and_then(|win| win.document())
@@ -591,7 +654,9 @@ pub async fn run() {
                 match state.render() {
                     Ok(_) => {}
                     // Reconfigure the surface if it's lost or outdated
-                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => state.resize(state.size),
+                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                        state.resize(state.size)
+                    }
                     // The system is out of memory, we should probably quit
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // We're ignoring timeouts
