@@ -455,11 +455,72 @@ fn cal_spherical_position(pos: vec3<f32>) -> vec2<f32>{
     return vec2<f32>(x,y);
 }
 
+fn get_face_coor(face: i32, coor: vec2<f32>) ->vec2<f32> {
+    var c = vec2<f32>(coor.x / 4.0, coor.y / 3.0);
+    var start: vec2<f32>;
+    if face == 0 {
+        start = vec2<f32>(2.0 / 4.0, 1.0 / 3.0);
+    }
+    else if face == 1 {
+        start = vec2<f32>(0.0 / 4.0, 1.0 / 3.0);
+    }
+    else if face == 2 {
+        start = vec2<f32>(1.0 / 4.0, 2.0 / 3.0);
+    }
+    else if face == 3 {
+        start = vec2<f32>(1.0 / 4.0, 0.0 / 3.0);
+    }
+    else if face == 4 {
+        start = vec2<f32>(1.0 / 4.0, 1.0 / 3.0);
+    }
+    else if face == 5 {
+        start = vec2<f32>(3.0 / 4.0, 1.0 / 3.0);
+    }
+    return start + c;
+}
+
+fn cal_cube_position(pos: vec3<f32>) -> vec2<f32>{
+    var face: i32;
+    var coor: vec2<f32>;
+    if abs(pos.x)>abs(pos.y)&&abs(pos.x)>abs(pos.z){
+        if pos.x > 0.0 {
+            face = 0;
+            coor = vec2<f32>((1.0 - pos.z / abs(pos.x)) / 2.0, (1.0 + pos.y / abs(pos.x)) / 2.0); 
+        }
+        else{
+            face = 1;
+            coor = vec2<f32>((1.0 + pos.z / abs(pos.x)) / 2.0, (1.0 + pos.y / abs(pos.x)) / 2.0); 
+        }
+    }
+    else if abs(pos.y)>abs(pos.z){
+        if pos.y > 0.0 {
+            face = 2;
+            coor = vec2<f32>((1.0 + pos.x / abs(pos.y)) / 2.0, (1.0 - pos.z / abs(pos.y)) / 2.0); 
+        }
+        else{
+            face = 3;
+            coor = vec2<f32>((1.0 + pos.x / abs(pos.y)) / 2.0, (1.0 + pos.z / abs(pos.y)) / 2.0); 
+        }
+    }
+    else {
+        if pos.z > 0.0 {
+            face = 4;
+            coor = vec2<f32>((1.0 + pos.x / abs(pos.z)) / 2.0, (1.0 + pos.y / abs(pos.z)) / 2.0); 
+        }
+        else{
+            face = 5;
+            coor = vec2<f32>((1.0 - pos.x / abs(pos.z)) / 2.0, (1.0 + pos.y / abs(pos.z)) / 2.0); 
+        }
+    }
+    return get_face_coor(face, coor);
+}
+
 // Trace ray and return the resulting contribution of this ray
 fn get_pixel_color(ray: Ray) -> vec3<f32> {
     var final_pixel_color = vec3<f32>(0.0, 0.0, 0.0);
     var rec = trace_ray(ray);
-    let texture_position = cal_spherical_position(ray.dir);
+    // let texture_position = cal_spherical_position(ray.dir);
+    let texture_position = cal_cube_position(ray.dir);
     backcolor = textureSample(t_diffuse, s_diffuse, texture_position);
     if !rec.hit_found // if hit background  
     {
