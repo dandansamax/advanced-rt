@@ -98,16 +98,49 @@ struct CameraUniform {
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct MetaInfo {
     resolution: [u32; 2],
+    theta: f32,
+    _padding2: u32,
 }
 
 impl MetaInfo {
     fn new() -> Self {
         Self {
             resolution: [800, 600],
+            theta: 0.0,
+            _padding2: 0,
         }
     }
     fn update_resolution(&mut self, size: &winit::dpi::PhysicalSize<u32>) {
         self.resolution = [size.width, size.height]
+    }
+    fn update_key(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state,
+                        virtual_keycode: Some(keycode),
+                        ..
+                    },
+                ..
+            } => {
+                if *state == ElementState::Pressed {
+                    match keycode {
+                        VirtualKeyCode::Key0 => {
+                            self.theta += 0.01;
+                            if self.theta >= 360.0 {
+                                self.theta = 0.0;
+                            }
+                            true
+                        }
+                        _ => false,
+                    }
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 }
 
@@ -292,9 +325,9 @@ impl State {
         };
         surface.configure(&device, &config);
 
-        let diffuse_bytes = include_bytes!("happy-tree.png");
+        let diffuse_bytes = include_bytes!("yozora.jpg");
         let diffuse_texture =
-            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
+            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "yozora.jpg").unwrap();
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -518,7 +551,8 @@ impl State {
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event)
+        // self.camera_controller.process_events(event)
+        self.meta_info.update_key(event)
     }
 
     fn update(&mut self) {
