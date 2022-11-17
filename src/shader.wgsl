@@ -58,17 +58,26 @@ struct Light {
    color: vec3<f32>
 }
 
+struct LightPanel {
+    corner_point: vec3<f32>,
+    a: vec3<f32>,
+    b: vec3<f32>,
+    color: vec3<f32>
+}
+
+let pi:f32 = 3.1415926; 
+let supersample_n:u32 = 4u; 
+let N:u32 = supersample_n * supersample_n;
 
 // ----------------------------------------------------------------------------
 // global variables
 // ----------------------------------------------------------------------------
 var<private> camera: Camera;
 var<private> light: Light;
+var<private> light_panel: LightPanel;
 var<private> Ka:f32 = 0.4;
 var<private> Kd:f32 = 0.4; 
 var<private> Ks:f32 = 0.2; 
-var<private> pi:f32 = 3.1415926; 
-var<private> supersample_n:u32 = 4u; 
 
 var<private> pixel_position: vec2<f32>;
 var<private> image_resolution: vec2<f32>;
@@ -76,6 +85,7 @@ var<private> backcolor: vec4<f32>;
 
 var<private> seed: u32 = 0u;
 
+var<private> light_points: array<vec3<f32>, N>;
 // world objects
 var<private> world_spheres_count: i32 = 1;
 var<private> world_spheres: array<Sphere, 1>;
@@ -534,8 +544,12 @@ fn get_sample_color(ray: Ray) -> vec3<f32> {
 }
 
 fn setup_light() {
-    light.position = vec3<f32>(3.0, 3.0, 1.0);
-    light.color = vec3<f32>(1.0, 1.0, 1.0);
+    // light.position = vec3<f32>(3.0, 3.0, 1.0);
+    // light.color = vec3<f32>(1.0, 1.0, 1.0);
+    light_panel.corner_point = vec3<f32>(3.0, 3.0, 1.0);
+    light_panel.a = vec3<f32>(1.0, 0.0, 0.0);
+    light_panel.b = vec3<f32>(0.0, 1.0, 0.0);
+    light_panel.color = vec3<f32>(1.0, 1.0, 1.0);
 }
 fn setup_camera() {
 
@@ -628,6 +642,25 @@ fn rnd() -> f32{
   return (f32(lcg()) / f32(0x01000000));
 }
 
+fn generate_lights() {
+    
+    for (var i = 0u; i < supersample_n; i++) {
+        for (var j = 0u; j < supersample_n; j++) {
+            let ui = (f32(i) + rnd()) / f32(supersample_n);
+            let vi = (f32(j) + rnd()) / f32(supersample_n);
+            light_points[i*supersample_n+j] = ui * light_panel.a + vi * light_panel.b + light_panel.corner_point;
+        }
+    }
+
+    // shuffle
+    for (var i = N - 1u; i >= 0u; i--){
+        let j = u32(floor(rnd()*f32(i + 1u)));
+        let tmp = light_points[i];
+        light_points[j] = light_points[i];
+        light_points[i] = tmp;
+    }
+}
+
 fn get_pixel_color() -> vec3<f32> {
   // setup scene
     let top = 0.88;
@@ -635,6 +668,7 @@ fn get_pixel_color() -> vec3<f32> {
     let left = right * (-1.0);
     let bottom = top * (-1.0);
 
+    generate_lights();
 
     var pixel_color = vec3<f32>(0.0, 0.0, 0.0);
 
