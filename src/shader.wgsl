@@ -53,11 +53,6 @@ struct Camera {
   dir: vec3<f32>
 }
 
-struct Light {
-   position: vec3<f32>,
-   color: vec3<f32>
-}
-
 struct LightPanel {
     corner_point: vec3<f32>,
     a: vec3<f32>,
@@ -65,15 +60,14 @@ struct LightPanel {
     color: vec3<f32>
 }
 
-let pi:f32 = 3.1415926; 
-let supersample_n:u32 = 4u; 
-let N:u32 = supersample_n * supersample_n;
+let pi: f32 = 3.1415926; 
+let supersample_n: u32 = 4u; 
+let N: u32 = 16u;
 
 // ----------------------------------------------------------------------------
 // global variables
 // ----------------------------------------------------------------------------
 var<private> camera: Camera;
-var<private> light: Light;
 var<private> light_panel: LightPanel;
 var<private> Ka:f32 = 0.4;
 var<private> Kd:f32 = 0.4; 
@@ -147,7 +141,7 @@ fn modulo(x: f32, y: f32) -> f32 {
 fn compute_diffuse(lightDir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
   //Intensity of the diffuse light.
     var ndotL = max(dot(normal, lightDir), 0.0);
-    return  light.color * ndotL;
+    return  light_panel.color * ndotL;
 }
 fn compute_specular(viewDir: vec3<f32>, lightDir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
     let phong_exponent = 32.0;
@@ -155,7 +149,7 @@ fn compute_specular(viewDir: vec3<f32>, lightDir: vec3<f32>, normal: vec3<f32>) 
     let        V = normalize(-viewDir);
     let        R = reflect(-lightDir, normal);
     let      specular = pow(max(dot(V, R), 0.0), phong_exponent);
-    return light.color * specular;
+    return light_panel.color * specular;
 }
 fn get_checkerboard_texture_color(uv: vec2<f32>) -> vec3<f32> {
     var cols = 10.0;
@@ -431,12 +425,12 @@ fn trace_ray(ray: Ray) -> HitRecord {
     return hitWorld_rec;
 }
 
-fn compute_shading(ray: Ray, rec: HitRecord) -> vec3<f32> {
+fn compute_shading(ray: Ray, rec: HitRecord, index: u32) -> vec3<f32> {
     // ambient
     let ambient = rec.hit_material.ambient;
 
     // diffuse
-    var lightDir = light.position - rec.p;
+    var lightDir = light_points[index] - rec.p;
     let lightDistance = length(lightDir);
     lightDir = normalize(lightDir);
     let diffuse = compute_diffuse(lightDir, rec.normal);
@@ -527,7 +521,7 @@ fn cal_cube_position(pos: vec3<f32>) -> vec2<f32>{
 }
 
 // Trace ray and return the resulting contribution of this ray
-fn get_sample_color(ray: Ray) -> vec3<f32> {
+fn get_sample_color(ray: Ray, index: u32) -> vec3<f32> {
     var final_pixel_color = vec3<f32>(0.0, 0.0, 0.0);
     var rec = trace_ray(ray);
     // let texture_position = cal_spherical_position(ray.dir);
@@ -537,7 +531,7 @@ fn get_sample_color(ray: Ray) -> vec3<f32> {
     {
         final_pixel_color = get_background_color();
     } else {
-        final_pixel_color = compute_shading(ray, rec);
+        final_pixel_color = compute_shading(ray, rec, index);
     }
     // final_pixel_color = get_background_color();
     return final_pixel_color;
@@ -547,8 +541,8 @@ fn setup_light() {
     // light.position = vec3<f32>(3.0, 3.0, 1.0);
     // light.color = vec3<f32>(1.0, 1.0, 1.0);
     light_panel.corner_point = vec3<f32>(3.0, 3.0, 1.0);
-    light_panel.a = vec3<f32>(1.0, 0.0, 0.0);
-    light_panel.b = vec3<f32>(0.0, 1.0, 0.0);
+    light_panel.a = vec3<f32>(0.1, 0.0, 0.0);
+    light_panel.b = vec3<f32>(0.0, 0.1, 0.0);
     light_panel.color = vec3<f32>(1.0, 1.0, 1.0);
 }
 fn setup_camera() {
@@ -653,8 +647,8 @@ fn generate_lights() {
     }
 
     // shuffle
-    for (var i = N - 1u; i >= 0u; i--){
-        let j = u32(floor(rnd()*f32(i + 1u)));
+    for (var i = N - 1u; i >= 1u; i--){
+        let j = u32(floor(rnd()*f32(i + 1u)) + 0.00001);
         let tmp = light_points[i];
         light_points[j] = light_points[i];
         light_points[i] = tmp;
@@ -677,7 +671,7 @@ fn get_pixel_color() -> vec3<f32> {
             let ui = left + (right - left) * ((pixel_position.x + (f32(i) + rnd()) / f32(supersample_n)) / image_resolution.x);
             let vi = bottom + (top - bottom) * ((pixel_position.y + (f32(j) + rnd()) / f32(supersample_n)) / image_resolution.y);
             var ray: Ray = get_ray(camera, ui, vi);
-            pixel_color = pixel_color + get_sample_color(ray);
+            pixel_color = pixel_color + get_sample_color(ray, i * supersample_n + j);
         }
     }
     pixel_color = pixel_color / f32(supersample_n * supersample_n);
