@@ -68,12 +68,13 @@ var<private> Ka:f32 = 0.4;
 var<private> Kd:f32 = 0.4; 
 var<private> Ks:f32 = 0.2; 
 var<private> pi:f32 = 3.1415926; 
+var<private> supersample_n:u32 = 4u; 
 
 var<private> pixel_position: vec2<f32>;
 var<private> image_resolution: vec2<f32>;
 var<private> backcolor: vec4<f32>;
 
-var<private> seed: f32 = 0.0;
+var<private> seed: u32 = 0u;
 
 // world objects
 var<private> world_spheres_count: i32 = 1;
@@ -516,7 +517,7 @@ fn cal_cube_position(pos: vec3<f32>) -> vec2<f32>{
 }
 
 // Trace ray and return the resulting contribution of this ray
-fn get_pixel_color(ray: Ray) -> vec3<f32> {
+fn get_sample_color(ray: Ray) -> vec3<f32> {
     var final_pixel_color = vec3<f32>(0.0, 0.0, 0.0);
     var rec = trace_ray(ray);
     // let texture_position = cal_spherical_position(ray.dir);
@@ -599,34 +600,70 @@ fn get_ray(camera: Camera, ui: f32, vj: f32) -> Ray {
     return ray;
 }
 
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    image_resolution = vec2<f32>(metainfo.resolution);
-    let position = in.clip_position.xyz;
-    pixel_position = vec2<f32>(position.x, (image_resolution.y - position.y));
+fn tea(val0:u32, val1:u32)->u32{
+// "GPU Random Numbers via the Tiny Encryption Algorithm"
+  var v0 = val0;
+  var v1 = val1;
+  var s0 = u32(0);
+  for (var n: i32 = 0; n < 16; n++) {
+    s0 += 0x9e3779b9u;
+    v0 += ((v1 << 4u) + 0xa341316cu) ^ (v1 + s0) ^ ((v1 >> 5u) + 0xc8013ea4u);
+    v1 += ((v0 << 4u) + 0xad90777du) ^ (v0 + s0) ^ ((v0 >> 5u) + 0x7e95761eu);
+  }
 
-  // global variable
+  return v0;
+}
 
-    // if pixel_position.x <= 1.0 && pixel_position.y <= 1.0 {
-    //     update_buffers();
-    // }
+fn lcg() -> u32{
+// Generate a random unsigned int in [0, 2^24) given the previous RNG state
+// using the Numerical Recipes linear congruential generator
+  let LCG_A = 1664525u;
+  let LCG_C = 1013904223u;
+  seed = (LCG_A * seed + LCG_C);
+  return seed & 0x00FFFFFFu;
+}
 
+fn rnd() -> f32{
+  // Generate a random float in [0, 1) 
+  return (f32(lcg()) / f32(0x01000000));
+}
+
+fn get_pixel_color() -> vec3<f32> {
   // setup scene
     let top = 0.88;
     let right = (image_resolution.x / image_resolution.y) * top;
     let left = right * (-1.0);
     let bottom = top * (-1.0);
 
+
+    var pixel_color = vec3<f32>(0.0, 0.0, 0.0);
+
+    for (var i = 0u; i < supersample_n; i++) {
+        for (var j = 0u; j < supersample_n; j++) {
+            let ui = left + (right - left) * ((pixel_position.x + (f32(i) + rnd()) / f32(supersample_n)) / image_resolution.x);
+            let vi = bottom + (top - bottom) * ((pixel_position.y + (f32(j) + rnd()) / f32(supersample_n)) / image_resolution.y);
+            var ray: Ray = get_ray(camera, ui, vi);
+            pixel_color = pixel_color + get_sample_color(ray);
+        }
+    }
+    pixel_color = pixel_color / f32(supersample_n * supersample_n);
+    return pixel_color;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    image_resolution = vec2<f32>(metainfo.resolution);
+    let position = in.clip_position.xyz;
+    pixel_position = vec2<f32>(position.x, (image_resolution.y - position.y));
+
+    let v= u32(10);
+    seed = tea(u32(position.x) + u32(position.y) * metainfo.resolution.x, v);
+
     setup_camera();
     setup_light();
     setup_scene_objects();
 
-    let ui = left + (right - left) * ((pixel_position.x + 0.5) / image_resolution.x);
-    let vi = bottom + (top - bottom) * ((pixel_position.y + 0.5) / image_resolution.y);
-
-  // Generate a primary ray
-    var ray: Ray = get_ray(camera, ui, vi);
-    var pixel_color = get_pixel_color(ray);
+    let pixel_color = get_pixel_color();
 
     return vec4<f32>(pixel_color, 1.0);
 }
