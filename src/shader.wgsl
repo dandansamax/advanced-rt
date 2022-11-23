@@ -51,6 +51,7 @@ struct Camera {
   v: vec3<f32>,
   lookat: vec3<f32>,
   dir: vec3<f32>
+  focus_length: f32,
 }
 
 struct LightPanel {
@@ -61,8 +62,8 @@ struct LightPanel {
 }
 
 let pi: f32 = 3.1415926; 
-let supersample_n: u32 = 4u; 
-let N: u32 = 16u;
+let supersample_n: u32 = 8u; 
+let N: u32 = 64u;
 
 // ----------------------------------------------------------------------------
 // global variables
@@ -541,8 +542,8 @@ fn setup_light() {
     // light.position = vec3<f32>(3.0, 3.0, 1.0);
     // light.color = vec3<f32>(1.0, 1.0, 1.0);
     light_panel.corner_point = vec3<f32>(3.0, 3.0, 1.0);
-    light_panel.a = vec3<f32>(0.1, 0.0, 0.0);
-    light_panel.b = vec3<f32>(0.0, 0.1, 0.0);
+    light_panel.a = vec3<f32>(0.5, 0.0, 0.0);
+    light_panel.b = vec3<f32>(0.0, 0.5, 0.0);
     light_panel.color = vec3<f32>(1.0, 1.0, 1.0);
 }
 fn setup_camera() {
@@ -555,6 +556,8 @@ fn setup_camera() {
     camera.origin = rot * look_from;
     camera.lookat = vec3<f32>(0.0, 0.0, 0.0);
     camera.dir = normalize(camera.lookat - camera.origin);
+
+    camera.focus_length = length(camera.lookat - camera.origin);
 
     camera.w = normalize(camera.dir * (-1.0));
     camera.u = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), camera.w));
@@ -684,7 +687,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let position = in.clip_position.xyz;
     pixel_position = vec2<f32>(position.x, (image_resolution.y - position.y));
 
-    let v= u32(10);
+    let v= 12u;
     seed = tea(u32(position.x) + u32(position.y) * metainfo.resolution.x, v);
 
     setup_camera();
