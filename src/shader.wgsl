@@ -64,8 +64,8 @@ struct LightPanel {
 }
 
 let pi: f32 = 3.1415926; 
-let supersample_n: u32 = 8u; 
-let N: u32 = 64u;
+let supersample_n: u32 = 5u; 
+let N: u32 = 25u;
 
 // ----------------------------------------------------------------------------
 // global variables
@@ -83,7 +83,8 @@ var<private> backcolor: vec4<f32>;
 var<private> seed: u32 = 0u;
 
 var<private> light_points: array<vec3<f32>, N>;
-var<private> len_points: array<vec3<f32>, N>;
+var<private> lens_points: array<vec3<f32>, N>;
+var<private> glossy_points: array<vec2<f32>, N>;
 // world objects
 var<private> world_spheres_count: i32 = 1;
 var<private> world_spheres: array<Sphere, 1>;
@@ -147,11 +148,23 @@ fn compute_diffuse(lightDir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
     var ndotL = max(dot(normal, lightDir), 0.0);
     return  light_panel.color * ndotL;
 }
-fn compute_specular(viewDir: vec3<f32>, lightDir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+
+fn perturbing_dir(lightDir: vec3<f32>, index: u32) -> vec3<f32> {
+    let w = normalize(lightDir);
+    let u = normalize(cross(lightDir, vec3<f32>(0.0,0.1,0.0)));
+    let v = cross(w,u);
+
+    let delta = (-0.5 + u) * glossy_points[index].x + (-0.5 + v) * glossy_points[index].y;
+    return normalize(lightDir + delta * 0.3);
+}
+
+fn compute_specular(viewDir: vec3<f32>, lightDir: vec3<f32>, normal: vec3<f32>, index: u32) -> vec3<f32> {
+    let new_lightDir = perturbing_dir(lightDir, index);
+
     let phong_exponent = 32.0;
     // Specular
     let        V = normalize(-viewDir);
-    let        R = reflect(-lightDir, normal);
+    let        R = reflect(-new_lightDir, normal);
     let      specular = pow(max(dot(V, R), 0.0), phong_exponent);
     return light_panel.color * specular;
 }
@@ -452,7 +465,7 @@ fn compute_shading(ray: Ray, rec: HitRecord, index: u32) -> vec3<f32> {
             attenuation = 0.3;
         } else {
          // Compute specular only if not in shadow
-            specular = compute_specular(ray.dir, lightDir, rec.normal);
+            specular = compute_specular(ray.dir, lightDir, rec.normal, index);
         }
     }
     return ambient * Ka + (diffuse * Kd + specular * Ks) * attenuation;
@@ -566,8 +579,8 @@ fn setup_camera() {
     camera.u = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), camera.w));
     camera.v = cross(camera.w, camera.u);
     
-    camera.a = camera.u * 0.05;
-    camera.b = camera.v * 0.05;
+    camera.a = camera.u * 0.00;
+    camera.b = camera.v * 0.00;
 }
 fn setup_scene_objects() {
   
@@ -610,7 +623,7 @@ fn setup_scene_objects() {
 }
 fn get_ray(camera: Camera, ui: f32, vj: f32, index: u32) -> Ray {
     var ray: Ray;
-    ray.orig = len_points[index];
+    ray.orig = lens_points[index];
     ray.dir = normalize(camera.focus_length * ((camera.w * (-1.0)) + (camera.u * ui) + (camera.v * vj)) + camera.origin - ray.orig);
     ray.t_min = 0.0;
     ray.t_max = 10000.0;
@@ -664,25 +677,43 @@ fn generate_lights() {
     }
 }
 
-fn generate_len() {
+fn generate_lens() {
     
     for (var i = 0u; i < supersample_n; i++) {
         for (var j = 0u; j < supersample_n; j++) {
             let ui = (f32(i) + rnd()) / f32(supersample_n);
             let vi = (f32(j) + rnd()) / f32(supersample_n);
-            len_points[i*supersample_n+j] = (-0.5 + ui) * camera.a + (-0.5 + vi) * camera.b + camera.origin;
+            lens_points[i*supersample_n+j] = (-0.5 + ui) * camera.a + (-0.5 + vi) * camera.b + camera.origin;
         }
     }
 
     // shuffle
     for (var i = N - 1u; i >= 1u; i--){
         let j = u32(floor(rnd()*f32(i + 1u)) + 0.00001);
-        let tmp = len_points[i];
-        len_points[j] = len_points[i];
-        len_points[i] = tmp;
+        let tmp = lens_points[i];
+        lens_points[j] = lens_points[i];
+        lens_points[i] = tmp;
     }
 }
 
+fn generate_glossy() {
+    
+    for (var i = 0u; i < supersample_n; i++) {
+        for (var j = 0u; j < supersample_n; j++) {
+            let ui = (f32(i) + rnd()) / f32(supersample_n);
+            let vi = (f32(j) + rnd()) / f32(supersample_n);
+            glossy_points[i*supersample_n+j] = vec2<f32>(ui, vi);
+        }
+    }
+
+    // shuffle
+    for (var i = N - 1u; i >= 1u; i--){
+        let j = u32(floor(rnd()*f32(i + 1u)) + 0.00001);
+        let tmp = glossy_points[i];
+        glossy_points[j] = glossy_points[i];
+        glossy_points[i] = tmp;
+    }
+}
 fn get_pixel_color() -> vec3<f32> {
   // setup scene
     let top = 0.88;
@@ -691,7 +722,8 @@ fn get_pixel_color() -> vec3<f32> {
     let bottom = top * (-1.0);
 
     generate_lights();
-    generate_len();
+    generate_lens();
+    generate_glossy();
 
     var pixel_color = vec3<f32>(0.0, 0.0, 0.0);
 
