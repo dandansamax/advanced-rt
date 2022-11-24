@@ -46,11 +46,13 @@ struct Cone {
 } 
 struct Camera {
   origin: vec3<f32>,
+  a: vec3<f32>,
+  b: vec3<f32>,
   w: vec3<f32>,
   u: vec3<f32>,
   v: vec3<f32>,
   lookat: vec3<f32>,
-  dir: vec3<f32>
+  dir: vec3<f32>,
   focus_length: f32,
 }
 
@@ -81,6 +83,7 @@ var<private> backcolor: vec4<f32>;
 var<private> seed: u32 = 0u;
 
 var<private> light_points: array<vec3<f32>, N>;
+var<private> len_points: array<vec3<f32>, N>;
 // world objects
 var<private> world_spheres_count: i32 = 1;
 var<private> world_spheres: array<Sphere, 1>;
@@ -562,6 +565,9 @@ fn setup_camera() {
     camera.w = normalize(camera.dir * (-1.0));
     camera.u = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), camera.w));
     camera.v = cross(camera.w, camera.u);
+    
+    camera.a = camera.u * 0.05;
+    camera.b = camera.v * 0.05;
 }
 fn setup_scene_objects() {
   
@@ -602,10 +608,10 @@ fn setup_scene_objects() {
     world_triangles[1].uv_c = vec2<f32>(0.0, 1.0);
     world_triangles[1].material.ambient = vec3<f32>(0.0, 0.0, 0.0);
 }
-fn get_ray(camera: Camera, ui: f32, vj: f32) -> Ray {
+fn get_ray(camera: Camera, ui: f32, vj: f32, index: u32) -> Ray {
     var ray: Ray;
-    ray.orig = camera.origin;
-    ray.dir = normalize((camera.w * (-1.0)) + (camera.u * ui) + (camera.v * vj));
+    ray.orig = len_points[index];
+    ray.dir = normalize(camera.focus_length * ((camera.w * (-1.0)) + (camera.u * ui) + (camera.v * vj)) + camera.origin - ray.orig);
     ray.t_min = 0.0;
     ray.t_max = 10000.0;
     return ray;
@@ -658,6 +664,25 @@ fn generate_lights() {
     }
 }
 
+fn generate_len() {
+    
+    for (var i = 0u; i < supersample_n; i++) {
+        for (var j = 0u; j < supersample_n; j++) {
+            let ui = (f32(i) + rnd()) / f32(supersample_n);
+            let vi = (f32(j) + rnd()) / f32(supersample_n);
+            len_points[i*supersample_n+j] = (-0.5 + ui) * camera.a + (-0.5 + vi) * camera.b + camera.origin;
+        }
+    }
+
+    // shuffle
+    for (var i = N - 1u; i >= 1u; i--){
+        let j = u32(floor(rnd()*f32(i + 1u)) + 0.00001);
+        let tmp = len_points[i];
+        len_points[j] = len_points[i];
+        len_points[i] = tmp;
+    }
+}
+
 fn get_pixel_color() -> vec3<f32> {
   // setup scene
     let top = 0.88;
@@ -666,6 +691,7 @@ fn get_pixel_color() -> vec3<f32> {
     let bottom = top * (-1.0);
 
     generate_lights();
+    generate_len();
 
     var pixel_color = vec3<f32>(0.0, 0.0, 0.0);
 
@@ -673,8 +699,9 @@ fn get_pixel_color() -> vec3<f32> {
         for (var j = 0u; j < supersample_n; j++) {
             let ui = left + (right - left) * ((pixel_position.x + (f32(i) + rnd()) / f32(supersample_n)) / image_resolution.x);
             let vi = bottom + (top - bottom) * ((pixel_position.y + (f32(j) + rnd()) / f32(supersample_n)) / image_resolution.y);
-            var ray: Ray = get_ray(camera, ui, vi);
-            pixel_color = pixel_color + get_sample_color(ray, i * supersample_n + j);
+            let index =  i * supersample_n + j;
+            var ray: Ray = get_ray(camera, ui, vi, index);
+            pixel_color = pixel_color + get_sample_color(ray, index);
         }
     }
     pixel_color = pixel_color / f32(supersample_n * supersample_n);
