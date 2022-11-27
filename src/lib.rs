@@ -325,9 +325,9 @@ impl State {
         };
         surface.configure(&device, &config);
 
-        let diffuse_bytes = include_bytes!("cube.png");
+        let diffuse_bytes = include_bytes!("yozora.jpg");
         let diffuse_texture =
-            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "cube.png").unwrap();
+            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "yozora.jpg").unwrap();
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

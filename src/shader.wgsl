@@ -544,8 +544,8 @@ fn cal_cube_position(rawpos: vec3<f32>) -> vec2<f32>{
 fn get_sample_color(ray: Ray, index: u32) -> vec3<f32> {
     var final_pixel_color = vec3<f32>(0.0, 0.0, 0.0);
     var rec = trace_ray(ray);
-    // let texture_position = cal_spherical_position(ray.dir);
-    let texture_position = cal_cube_position(ray.dir);
+    let texture_position = cal_spherical_position(ray.dir);
+    // let texture_position = cal_cube_position(ray.dir);
     backcolor = textureSample(t_diffuse, s_diffuse, texture_position);
     if !rec.hit_found // if hit background  
     {
