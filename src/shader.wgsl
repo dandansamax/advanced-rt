@@ -501,7 +501,10 @@ fn get_face_coor(face: i32, coor: vec2<f32>) ->vec2<f32> {
     return start + c;
 }
 
-fn cal_cube_position(pos: vec3<f32>) -> vec2<f32>{
+fn cal_cube_position(rawpos: vec3<f32>) -> vec2<f32>{
+    let theta = pi / 2.0;
+    var rot = mat3x3<f32>(1., 0., 0., 0., cos(theta), -sin(theta), 0.,  sin(theta), cos(theta));
+    let pos = rot * rawpos;
     var face: i32;
     var coor: vec2<f32>;
     if abs(pos.x)>abs(pos.y)&&abs(pos.x)>abs(pos.z){
@@ -565,7 +568,7 @@ fn setup_light() {
 fn setup_camera() {
 
   // Rotate the camera around
-    var look_from = vec3<f32>(0.0, 1.0, 1.0);
+    var look_from = vec3<f32>(0.0, 1.5, 1.5);
     var theta = metainfo.theta;
     var rot = mat3x3<f32>(cos(theta), 0., -sin(theta), 0., 1., 0., -sin(theta), 0., cos(theta));
 
@@ -579,8 +582,8 @@ fn setup_camera() {
     camera.u = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), camera.w));
     camera.v = cross(camera.w, camera.u);
     
-    camera.a = camera.u * 0.00;
-    camera.b = camera.v * 0.00;
+    camera.a = camera.u * 0.1;
+    camera.b = camera.v * 0.1;
 }
 fn setup_scene_objects() {
   
